@@ -1,0 +1,5 @@
+pynput
+pandas
+numpy
+websocket-client
+tqdm
