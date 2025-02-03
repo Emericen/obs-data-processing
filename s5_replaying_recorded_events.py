@@ -4,7 +4,7 @@ import pandas as pd
 
 from pynput.mouse import Controller as MouseController
 from pynput.keyboard import Controller as KeyboardController
-from misc import MOUSE_BUTTON_MAP, KEY_CODE_MAP
+from keycodes import MOUSE_BUTTON_MAP, KEY_CODE_MAP
 
 
 def convert_to_pynput_mouse_button(obs_button_code):
