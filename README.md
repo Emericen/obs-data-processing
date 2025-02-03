@@ -1,6 +1,5 @@
-Here's how to record everything OBS offers (video, audio, camera, etc) along with mouse and keyboard inputs.
-
-This is meant for human computer use data to perform behavior cloning on VLM based computer agents.
+# OBS Input Logger
+A Mouse & Keyboard Event Collection Tool for AI Behavior Cloning
 
 ## Setup
 
@@ -45,3 +44,8 @@ Run the following to down sample the data:
 python s4_data_post_processing.py <recorded_actions.csv> <down_sampled_actions.csv>
 ```
 
+## Replaying action data
+
+run `python s5_replaying_recorded_events.py <down_sampled_actions.csv>` to replay the action data.
+
+Note you might need to setup your desktop environment to match the beginning state of your recording.
