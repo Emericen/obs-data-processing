@@ -4,7 +4,9 @@ from threading import Thread
 
 import socket
 from websocket import WebSocketApp
-from websocket_server import WebSocketServer
+from websocket_server import WebsocketServer
+
+from pynput import mouse, keyboard
 
 
 class Node:
@@ -28,7 +30,7 @@ class Node:
 class Server(Node):
     def __init__(self, host="0.0.0.0", port=8765):
         super().__init__(host, port)
-        self.server = WebSocketServer(self.host, self.port)
+        self.server = WebsocketServer(self.host, self.port)
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -59,16 +61,40 @@ class Client(Node):
     def __init__(self, server_ip, port=8765):
         super().__init__(server_ip, port)
         self.ws = None
+        self.mouse_listener = mouse.Listener(
+            on_move=self._on_mouse_move,
+            on_click=self._on_mouse_click,
+            on_scroll=self._on_mouse_scroll,
+        )
+        self.keyboard_listener = keyboard.Listener(
+            on_press=self._on_keyboard_press,
+            on_release=self._on_keyboard_release,
+        )
 
+    def start(self):
+        uri = f"ws://{self.host}:{self.port}"
+        self.ws = WebSocketApp(
+            uri,
+            on_open=self._on_open,
+            on_message=self._on_message,
+            on_error=self._on_error,
+            on_close=self._on_close,
+        )
+
+        self.mouse_listener.start()
+        self.keyboard_listener.start()
+        self.ws.run_forever()
+
+    
     def _on_message(self, ws, message):
         print(f"\nReceived: {message}")
-        sys.stdout.write("> ")
-        sys.stdout.flush()
 
     def _on_error(self, ws, error):
         print(error)
 
     def _on_close(self, ws, close_status_code, close_msg):
+        self.mouse_listener.stop()
+        self.keyboard_listener.stop()
         print("Connection closed")
 
     def _on_open(self, ws):
@@ -80,16 +106,25 @@ class Client(Node):
             message = input("> ")
             self.ws.send(message)
 
-    def start(self):
-        uri = f"ws://{self.host}:{self.port}"
-        self.ws = WebSocketApp(
-            uri,
-            on_open=self._on_open,
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close,
-        )
-        self.ws.run_forever()
+    def _on_mouse_move(self, x, y):
+        if self.ws:
+            self.ws.send(f"mouse_move {x}, {y}")
+
+    def _on_mouse_click(self, x, y, button, pressed):
+        if self.ws:
+            self.ws.send(f"mouse_click {x}, {y}, {button}, {pressed}")
+
+    def _on_mouse_scroll(self, x, y, dx, dy):
+        if self.ws:
+            self.ws.send(f"mouse_scroll {x}, {y}, {dx}, {dy}")
+
+    def _on_keyboard_press(self, key):
+        if self.ws:
+            self.ws.send(f"keyboard_press {key}")
+
+    def _on_keyboard_release(self, key):
+        if self.ws:
+            self.ws.send(f"keyboard_release {key}")
 
 
 def main():
