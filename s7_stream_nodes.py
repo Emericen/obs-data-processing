@@ -34,18 +34,13 @@ class Node:
 class Server(Node):
     def __init__(self, host="0.0.0.0", port=8765):
         super().__init__(host, port)
-        # Create server and set handlers
         self.server = WebsocketServer(self.host, self.port)
-        self.start_cmd_parser = argparse.ArgumentParser(
-            description="Start command parser"
-        )
-        self.start_cmd_parser.add_argument("--x1", type=int, help="x1")
-        self.start_cmd_parser.add_argument("--y1", type=int, help="y1")
-        self.start_cmd_parser.add_argument("--x2", type=int, help="x2")
-        self.start_cmd_parser.add_argument("--y2", type=int, help="y2")
-        self.start_cmd_parser.add_argument(
-            "--frame_count", type=int, help="frame_count"
-        )
+        self.resolutions = [
+            (1280, 720),   # 720p
+            (1920, 1080),  # 1080p
+            (2560, 1440),  # 1440p
+            (3840, 2160),  # 2160p
+        ]
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -60,17 +55,11 @@ class Server(Node):
         print(f"Client disconnected: {client['address']}")
 
     def _message_received(self, client, server, message):
-        """
-        When we get a message from a client:
-        - If it's "start", capture multiple screenshots and send them as binary data.
-        """
-        print(f"\nReceived: {message}")
-        message_parts = message.split()
-        if message_parts[0] == "start":
-            try:
-                args = self.start_cmd_parser.parse_args(message_parts[1:])
-                region = (args.x1, args.y1, args.x2, args.y2)
-                frame_count = args.frame_count
+        if message == "start":
+            for width, height in self.resolutions:
+                print(f"\nTesting {width}x{height}")
+                region = (0, 0, width, height)
+                frame_count = 1000
                 start_time = time.time()
                 total_bytes = 0
                 frame_stats = []
@@ -101,17 +90,6 @@ class Server(Node):
                 print(
                     f"Performance: {frame_count/duration:.1f} avg fps, {total_bytes/1024/1024/duration:.1f} avg MB/s"
                 )
-            except SystemExit:
-                print(
-                    "❌ Error: Invalid command or argument format. Use --help for usage info."
-                )
-                return
-            except ValueError as e:
-                print(f"❌ Error: {e}")
-                return
-            except Exception as e:
-                print(f"❌ Error: {e}")
-                return
 
     def start(self):
         print(f"Server started on {self.host}:{self.port}")
@@ -141,36 +119,16 @@ class Client(Node):
         self.ws.run_forever()
 
     def _on_message(self, ws, message):
-        """
-        If the server sends us text, 'message' will be a str.
-        If the server sends us binary data, 'message' will be bytes.
-        """
         if len(message) > 100:  # Likely base64 image data
             try:
                 img_data = base64.b64decode(message)
-                print(f"\n[CLIENT] Received image data: {len(img_data)} bytes")
-
                 self.frames_received += 1
                 self.total_bytes += len(img_data)
                 if self.start_time is None:
                     self.start_time = time.time()
-
-                duration = time.time() - self.start_time
-                avg_fps = self.frames_received / duration
-                avg_mbps = self.total_bytes / 1024 / 1024 / duration
-                print(
-                    f"[CLIENT] Performance: {avg_fps:.1f} avg fps, {avg_mbps:.1f} avg MB/s"
-                )
-
-                # Optionally decode it as an image:
-                img = Image.open(io.BytesIO(img_data))
-                print(f"[CLIENT] Decoded image: {img.size}, mode={img.mode}")
-                # e.g., show the image or convert to numpy
-                # img.show()
             except Exception as e:
                 print("[CLIENT] Failed to decode image:", e)
         else:
-            # Text message
             print(f"\n[CLIENT] Received text: {message}")
 
     def _on_error(self, ws, error):
@@ -226,4 +184,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # start --x1 0 --y1 0 --x2 1280 --y2 720 --frame_count 100
