@@ -7,35 +7,24 @@ import sys
 # Constants
 VIDEO_PORT = 8765
 
-
 async def stream_video(websocket, path):
     """
     Server: Captures screen via FFmpeg and streams it over WebSockets.
     """
     ffmpeg_cmd = [
         "ffmpeg",
-        "-f",
-        "x11grab",  # Change this for different OS
-        "-video_size",
-        "1280x720",
-        "-framerate",
-        "30",
-        "-i",
-        ":0.0",
-        "-vcodec",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-tune",
-        "zerolatency",
-        "-f",
-        "mpegts",
-        "pipe:1",
+        "-f", "x11grab",  # Change this for different OS
+        "-video_size", "1280x720",
+        "-framerate", "30",
+        "-i", ":0.0",
+        "-vcodec", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-f", "mpegts",
+        "pipe:1"
     ]
 
-    proc = subprocess.Popen(
-        ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-    )
+    proc = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     try:
         while True:
@@ -50,19 +39,16 @@ async def stream_video(websocket, path):
         proc.terminate()
         await websocket.close()
 
-
 async def receive_video(server_ip):
     """
     Client: Receives video over WebSockets and pipes it into FFplay.
     """
     ffplay_cmd = [
         "ffplay",
-        "-i",
-        "pipe:0",
+        "-i", "pipe:0",
         "-autoexit",
         "-nostats",
-        "-loglevel",
-        "quiet",
+        "-loglevel", "quiet"
     ]
     ffplay_proc = subprocess.Popen(ffplay_cmd, stdin=subprocess.PIPE)
 
@@ -76,7 +62,6 @@ async def receive_video(server_ip):
         finally:
             ffplay_proc.stdin.close()
             ffplay_proc.terminate()
-
 
 async def main():
     if len(sys.argv) < 2:
@@ -102,7 +87,6 @@ async def main():
 
     else:
         print("Invalid mode. Use 'server' or 'client'.")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
