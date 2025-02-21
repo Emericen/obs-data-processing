@@ -10,6 +10,7 @@ from PIL import ImageGrab, Image
 import io
 import time
 import base64
+from tqdm import tqdm
 
 
 class Node:
@@ -72,23 +73,34 @@ class Server(Node):
                 frame_count = args.frame_count
                 start_time = time.time()
                 total_bytes = 0
-                for i in range(frame_count):
-                    frame_start = time.time()
-                    img = ImageGrab.grab(bbox=region)
-                    buf = io.BytesIO()
-                    img.save(buf, format="JPEG", quality=50)
-                    frame_data = base64.b64encode(buf.getvalue()).decode("utf-8")
-                    self.server.send_message(client, frame_data)
-                    total_bytes += len(frame_data)
-                    frame_time = time.time() - frame_start
-                    print(
-                        f"Frame {i+1}: {len(frame_data)} bytes, {frame_time * 1000:.1f} ms"
-                    )
+                frame_stats = []
+                with tqdm(total=frame_count, desc="Capturing frames") as pbar:
+                    for i in range(frame_count):
+                        frame_start = time.time()
+                        img = ImageGrab.grab(bbox=region)
+                        buf = io.BytesIO()
+                        img.save(buf, format="JPEG", quality=50)
+                        frame_data = base64.b64encode(buf.getvalue()).decode("utf-8")
+                        self.server.send_message(client, frame_data)
+                        frame_time = time.time() - frame_start
+                        frame_stats.append(
+                            {"bytes": len(frame_data), "time_ms": frame_time * 1000}
+                        )
+                        total_bytes += len(frame_data)
+                        pbar.update(1)
 
                 duration = time.time() - start_time
-                avg_fps = frame_count / duration
-                avg_mbps = total_bytes / 1024 / 1024 / duration
-                print(f"\nPerformance: {avg_fps:.1f} avg fps, {avg_mbps:.1f} avg MB/s")
+                times = [s["time_ms"] for s in frame_stats]
+                sizes = [s["bytes"] for s in frame_stats]
+                print(
+                    f"\nFrame timing (ms): min={min(times):.1f}, max={max(times):.1f}, mean={sum(times)/len(times):.1f}"
+                )
+                print(
+                    f"Frame sizes (bytes): min={min(sizes)}, max={max(sizes)}, mean={sum(sizes)/len(sizes):.1f}"
+                )
+                print(
+                    f"Performance: {frame_count/duration:.1f} avg fps, {total_bytes/1024/1024/duration:.1f} avg MB/s"
+                )
             except SystemExit:
                 print(
                     "❌ Error: Invalid command or argument format. Use --help for usage info."
