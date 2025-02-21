@@ -7,7 +7,7 @@ import sys
 # Constants
 VIDEO_PORT = 8765
 
-async def stream_video(websocket, path):
+async def stream_video(websocket):
     """
     Server: Captures screen via FFmpeg and streams it over WebSockets.
     """
