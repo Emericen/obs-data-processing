@@ -35,6 +35,16 @@ class Server(Node):
         super().__init__(host, port)
         # Create server and set handlers
         self.server = WebsocketServer(self.host, self.port)
+        self.start_cmd_parser = argparse.ArgumentParser(
+            description="Start command parser"
+        )
+        self.start_cmd_parser.add_argument("--x1", type=int, help="x1")
+        self.start_cmd_parser.add_argument("--y1", type=int, help="y1")
+        self.start_cmd_parser.add_argument("--x2", type=int, help="x2")
+        self.start_cmd_parser.add_argument("--y2", type=int, help="y2")
+        self.start_cmd_parser.add_argument(
+            "--frame_count", type=int, help="frame_count"
+        )
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -54,37 +64,42 @@ class Server(Node):
         - If it's "start", capture multiple screenshots and send them as binary data.
         """
         print(f"\nReceived: {message}")
-
+        message_parts = message.split()
         if message == "start":
-            start_time = time.time()
-            total_bytes = 0
-            frames_sent = 0
+            try:
+                args = self.start_cmd_parser.parse_args(message_parts[1:])
+                region = (args.x1, args.y1, args.x2, args.y2)
+                frame_count = args.frame_count
+                start_time = time.time()
+                total_bytes = 0
+                for i in range(frame_count):
+                    frame_start = time.time()
+                    img = ImageGrab.grab(bbox=region)
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=50)
+                    frame_data = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    self.server.send_message(client, frame_data)
+                    total_bytes += len(frame_data)
+                    frame_time = time.time() - frame_start
+                    print(
+                        f"Frame {i+1}: {len(frame_data)} bytes, {frame_time * 1000:.1f} ms"
+                    )
 
-            # Example: capture 10 frames, 720p, ~2 fps
-            for i in range(100):
-                frame_start = time.time()
-                region = (0, 0, 1280, 720)
-                img = ImageGrab.grab(bbox=region)
-
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=50)
-                frame_data = base64.b64encode(buf.getvalue()).decode('utf-8')
-                total_bytes += len(frame_data)
-
-                self.server.send_message(client, frame_data)
-                frames_sent += 1
-
-                frame_time = time.time() - frame_start
-                print(f"Frame {i+1}: {len(frame_data)} bytes, {1/frame_time:.1f} fps")
-
-            duration = time.time() - start_time
-            avg_fps = frames_sent / duration
-            avg_mbps = total_bytes / 1024 / 1024 / duration
-            print(f"\nPerformance: {avg_fps:.1f} avg fps, {avg_mbps:.1f} avg MB/s")
-
-        else:
-            # Just echo text back to the sender, or handle differently
-            self.server.send_message(client, f"ECHO: {message}")
+                duration = time.time() - start_time
+                avg_fps = frame_count / duration
+                avg_mbps = total_bytes / 1024 / 1024 / duration
+                print(f"\nPerformance: {avg_fps:.1f} avg fps, {avg_mbps:.1f} avg MB/s")
+            except SystemExit:
+                print(
+                    "❌ Error: Invalid command or argument format. Use --help for usage info."
+                )
+                return
+            except ValueError as e:
+                print(f"❌ Error: {e}")
+                return
+            except Exception as e:
+                print(f"❌ Error: {e}")
+                return
 
     def start(self):
         print(f"Server started on {self.host}:{self.port}")
@@ -122,7 +137,7 @@ class Client(Node):
             try:
                 img_data = base64.b64decode(message)
                 print(f"\n[CLIENT] Received image data: {len(img_data)} bytes")
-                
+
                 self.frames_received += 1
                 self.total_bytes += len(img_data)
                 if self.start_time is None:
