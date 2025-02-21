@@ -9,6 +9,7 @@ from pynput import mouse, keyboard
 from PIL import ImageGrab, Image
 import io
 import time
+import base64
 
 
 class Node:
@@ -67,10 +68,10 @@ class Server(Node):
 
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=50)
-                frame_data = buf.getvalue()
+                frame_data = base64.b64encode(buf.getvalue()).decode('utf-8')
                 total_bytes += len(frame_data)
 
-                self.server.send_message(client, frame_data, binary=True)
+                self.server.send_message(client, frame_data)
                 frames_sent += 1
 
                 frame_time = time.time() - frame_start
@@ -117,25 +118,25 @@ class Client(Node):
         If the server sends us text, 'message' will be a str.
         If the server sends us binary data, 'message' will be bytes.
         """
-        if isinstance(message, bytes):
-            # This is our JPEG frame data
-            print(f"\n[CLIENT] Received binary data: {len(message)} bytes")
-
-            self.frames_received += 1
-            self.total_bytes += len(message)
-            if self.start_time is None:
-                self.start_time = time.time()
-
-            duration = time.time() - self.start_time
-            avg_fps = self.frames_received / duration
-            avg_mbps = self.total_bytes / 1024 / 1024 / duration
-            print(
-                f"[CLIENT] Performance: {avg_fps:.1f} avg fps, {avg_mbps:.1f} avg MB/s"
-            )
-
-            # Optionally decode it as an image:
+        if len(message) > 100:  # Likely base64 image data
             try:
-                img = Image.open(io.BytesIO(message))
+                img_data = base64.b64decode(message)
+                print(f"\n[CLIENT] Received image data: {len(img_data)} bytes")
+                
+                self.frames_received += 1
+                self.total_bytes += len(img_data)
+                if self.start_time is None:
+                    self.start_time = time.time()
+
+                duration = time.time() - self.start_time
+                avg_fps = self.frames_received / duration
+                avg_mbps = self.total_bytes / 1024 / 1024 / duration
+                print(
+                    f"[CLIENT] Performance: {avg_fps:.1f} avg fps, {avg_mbps:.1f} avg MB/s"
+                )
+
+                # Optionally decode it as an image:
+                img = Image.open(io.BytesIO(img_data))
                 print(f"[CLIENT] Decoded image: {img.size}, mode={img.mode}")
                 # e.g., show the image or convert to numpy
                 # img.show()
