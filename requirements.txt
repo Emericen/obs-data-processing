@@ -4,3 +4,4 @@ numpy
 websocket-client
 websocket-server
 tqdm
+Pillow
