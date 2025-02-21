@@ -65,7 +65,7 @@ class Server(Node):
         """
         print(f"\nReceived: {message}")
         message_parts = message.split()
-        if message == "start":
+        if message_parts[0] == "start":
             try:
                 args = self.start_cmd_parser.parse_args(message_parts[1:])
                 region = (args.x1, args.y1, args.x2, args.y2)
@@ -214,3 +214,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # start --x1 0 --y1 0 --x2 1280 --y2 720 --frame_count 100
