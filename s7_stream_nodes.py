@@ -4,10 +4,7 @@ from threading import Thread
 import socket
 from websocket import WebSocketApp
 from websocket_server import WebsocketServer
-
-from pynput import mouse, keyboard
-from PIL import ImageGrab, Image
-import io
+import subprocess
 import time
 import base64
 from tqdm import tqdm
@@ -41,6 +38,7 @@ class Server(Node):
             (2560, 1440),  # 1440p
             (3840, 2160),  # 2160p
         ]
+        self.ffmpeg_process = None
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -54,30 +52,58 @@ class Server(Node):
     def _client_left(self, client, server):
         print(f"Client disconnected: {client['address']}")
 
+    def _start_ffmpeg(self, width, height):
+        if self.ffmpeg_process:
+            self.ffmpeg_process.terminate()
+        
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-f", "x11grab",
+            "-video_size", f"{width}x{height}",
+            "-framerate", "30",
+            "-i", ":0.0",
+            "-vcodec", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            "-f", "mpegts",
+            "pipe:1"
+        ]
+        self.ffmpeg_process = subprocess.Popen(
+            ffmpeg_cmd, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.DEVNULL
+        )
+
     def _message_received(self, client, server, message):
         if message == "start":
             for width, height in self.resolutions:
                 print(f"\nTesting {width}x{height}")
-                region = (0, 0, width, height)
+                self._start_ffmpeg(width, height)
+                
                 frame_count = 1000
                 start_time = time.time()
                 total_bytes = 0
                 frame_stats = []
+                
                 with tqdm(total=frame_count, desc="Capturing frames") as pbar:
                     for i in range(frame_count):
                         frame_start = time.time()
-                        img = ImageGrab.grab(bbox=region)
-                        buf = io.BytesIO()
-                        img.save(buf, format="JPEG", quality=50)
-                        frame_data = base64.b64encode(buf.getvalue()).decode("utf-8")
-                        self.server.send_message(client, frame_data)
+                        chunk = self.ffmpeg_process.stdout.read(4096)
+                        if not chunk:
+                            break
+                        
+                        self.server.send_message(client, chunk)
+                        
                         frame_time = time.time() - frame_start
-                        frame_stats.append(
-                            {"bytes": len(frame_data), "time_ms": frame_time * 1000}
-                        )
-                        total_bytes += len(frame_data)
+                        frame_stats.append({
+                            "bytes": len(chunk),
+                            "time_ms": frame_time * 1000
+                        })
+                        total_bytes += len(chunk)
                         pbar.update(1)
-
+                
+                self.ffmpeg_process.terminate()
+                
                 duration = time.time() - start_time
                 times = [s["time_ms"] for s in frame_stats]
                 sizes = [s["bytes"] for s in frame_stats]
@@ -98,6 +124,10 @@ class Server(Node):
         except KeyboardInterrupt:
             self.server.shutdown()
 
+    def __del__(self):
+        if self.ffmpeg_process:
+            self.ffmpeg_process.terminate()
+
 
 class Client(Node):
     def __init__(self, server_ip, port=8765):
@@ -106,6 +136,38 @@ class Client(Node):
         self.frames_received = 0
         self.total_bytes = 0
         self.start_time = None
+        self.ffplay_process = None
+
+    def _start_ffplay(self):
+        ffplay_cmd = [
+            "ffplay",
+            "-i", "pipe:0",
+            "-autoexit",
+            "-nostats",
+            "-loglevel", "quiet"
+        ]
+        self.ffplay_process = subprocess.Popen(
+            ffplay_cmd, 
+            stdin=subprocess.PIPE
+        )
+
+    def _on_message(self, ws, message):
+        if len(message) > 100:
+            try:
+                if not self.ffplay_process:
+                    self._start_ffplay()
+                
+                self.ffplay_process.stdin.write(message)
+                self.ffplay_process.stdin.flush()
+                
+                self.frames_received += 1
+                self.total_bytes += len(message)
+                if self.start_time is None:
+                    self.start_time = time.time()
+            except Exception as e:
+                print("[CLIENT] Failed to process video data:", e)
+        else:
+            print(f"\n[CLIENT] Received text: {message}")
 
     def start(self):
         uri = f"ws://{self.host}:{self.port}"
@@ -117,19 +179,6 @@ class Client(Node):
             on_close=self._on_close,
         )
         self.ws.run_forever()
-
-    def _on_message(self, ws, message):
-        if len(message) > 100:  # Likely base64 image data
-            try:
-                img_data = base64.b64decode(message)
-                self.frames_received += 1
-                self.total_bytes += len(img_data)
-                if self.start_time is None:
-                    self.start_time = time.time()
-            except Exception as e:
-                print("[CLIENT] Failed to decode image:", e)
-        else:
-            print(f"\n[CLIENT] Received text: {message}")
 
     def _on_error(self, ws, error):
         print("[CLIENT] WebSocket error:", error)
@@ -146,6 +195,11 @@ class Client(Node):
         while True:
             message = input("> ")
             self.ws.send(message)
+
+    def __del__(self):
+        if self.ffplay_process:
+            self.ffplay_process.stdin.close()
+            self.ffplay_process.terminate()
 
 
 def main():
