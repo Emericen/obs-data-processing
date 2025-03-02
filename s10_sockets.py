@@ -1,9 +1,8 @@
 import sys
-import time
 import socket
 
 
-BROADCAST_IP = "255.255.255.255"
+BROADCAST_IP = "192.168.146.255"
 LISTEN_IP = "0.0.0.0"
 
 BROADCAST_PORT = 1337
@@ -15,7 +14,6 @@ def host_broadcast_discovery(
     broadcast_port=BROADCAST_PORT,
     broadcast_message=BROADCAST_MESSAGE,
     ack_message=ACK_MESSAGE,
-    timeout_sec=10,
 ):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -25,7 +23,6 @@ def host_broadcast_discovery(
     while True:
         s.sendto(broadcast_message, (BROADCAST_IP, broadcast_port))
         data, addr = s.recvfrom(1024)
-        print(f"[Host] Received data: {data} from {addr}")
         if data == ack_message:
             guest_ip = addr[0]
             print(f"[Host] Received ack from guest at IP: {guest_ip}")
@@ -58,11 +55,11 @@ def guest_listen_and_ack(
 if __name__ == "__main__":
     mode = sys.argv[1].lower()
     if mode == "host":
-        print("[Guest] Booting up...")
-        # time.sleep(...) for a startup delay
         guest_ip = host_broadcast_discovery()
         print(f"Guest IP is {guest_ip}")
     elif mode == "guest":
+        print("[Guest] Booting up...")
+        # time.sleep(...) for a startup delay
         host_ip = guest_listen_and_ack()
         print(f"Host IP is {host_ip}")
     else:
