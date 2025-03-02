@@ -2,10 +2,10 @@ import sys
 import socket
 
 
-BROADCAST_IP = "192.168.146.255"
+BROADCAST_IP = "255.255.255.255"
 LISTEN_IP = "0.0.0.0"
 
-BROADCAST_PORT = 1337
+BROADCAST_PORT = 8765
 BROADCAST_MESSAGE = b"setup from host"
 ACK_MESSAGE = b"setup ack from guest"
 
